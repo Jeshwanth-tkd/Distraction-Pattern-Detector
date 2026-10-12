@@ -453,7 +453,7 @@ normal_days = df[df.label == "Normal"]
 order = normal_days.groupby("user_id")["screen_time_hrs"].median().sort_values().index
 fig, ax = plt.subplots(figsize=(15, 4.5))
 sns.boxplot(data=normal_days, x="user_id", y="screen_time_hrs", order=order, color="#2a9d8f", ax=ax, fliersize=1)
-ax.set_title("Screen time on NORMAL days, per user – baselines range from ~3 h to ~9 h")
+ax.set_title("Screen time on NORMAL days, per user – baselines range from ~2.5 h to ~7.3 h")
 ax.tick_params(axis="x", rotation=90); plt.tight_layout(); savefig("08_personal_baselines")
 
 # %% [markdown]
@@ -504,8 +504,8 @@ ax.legend(); plt.tight_layout(); savefig("11_pca")
 # %% [markdown]
 # ## 2.6 Key insights and how they guide model selection
 # 1. **Classes are imbalanced** (≈60 / 29 / 12%). → use stratified evaluation, macro-averaged F1 and `class_weight="balanced"`.
-# 2. **Raw values overlap heavily across users** because personal baselines range from ~3 h to ~9 h a day. → models must use **personal deviation (z-score) features**; a single population threshold will fail.
-# 3. **Personal z-scores separate the classes strongly** (largest Kruskal-Wallis effect sizes, highest mutual information). Social media, night usage, productive time and app switching are the strongest signals; notifications are weak.
+# 2. **Raw values overlap heavily across users** because personal baselines (median screen time on normal days) range from ~2.5 h to ~7.3 h a day. → models must use **personal deviation (z-score) features**; a single population threshold will fail.
+# 3. **Personal z-scores separate the classes strongly** (largest Kruskal-Wallis effect sizes, highest mutual information). By mutual information, the strongest single signals are deviations in social media, night usage, productive time, gaming and app switching; notifications on their own are weak.
 # 4. **Weekends raise the share of distracted days** (see the day-of-week chart), but the flag `is_weekend` on its own has near-zero mutual information once usage is known: the weekend effect already shows up in the usage values. It is therefore dropped in feature selection, together with `is_student` and `other_min`.
 # 5. **Relationships are partly non-linear and interacting** (e.g. high switching matters more when productive time also drops) and PCA shows overlapping class boundaries. → compare a linear model (Logistic Regression) with tree-based models (Decision Tree, Random Forest) that capture interactions; include unsupervised anomaly detection (Isolation Forest) and clustering (K-Means) because real users rarely label their days.
 # 6. **Distributions are right-skewed with heavy tails.** → robust medians for imputation, scaling inside pipelines, and tree models that are insensitive to monotonic skew.
@@ -941,7 +941,7 @@ print("Saved app/dashboard_data.json and models/parity_check.json")
 # * *Decision Tree:* a single tree has high variance; even tuned it trails by 0.06 F1.
 # * *Random Forest:* the ablation shows the key mechanism — once behaviour is expressed as **deviation from the person's own baseline**, the class boundary becomes close to linear. LR gains +0.069 F1 from the ratio and z-score features (0.694 → 0.763), while RF's extra flexibility adds variance rather than accuracy.
 #
-# **What drives distraction:** deviations in app switching, productive time, social media and night usage; notifications and the weekday/weekend flag carry little information on their own.
+# **What drives the predictions:** permutation importance ranks app switches, phone unlocks, night usage and notifications highest, followed by the personal deviations in productive time and gaming. Notifications are weak on their own (low mutual information) but help in combination with the other signals. Because the raw and z-score versions of a signal share information, shuffling one at a time understates the z-scores; the ablation in 3.5 is the clearer test of their value.
 #
 # **Remaining errors:** 18.8% of test days are misclassified and all but one are between **adjacent** classes (mostly *Increased ↔ Normal*), which is expected with ~7% noisy self-reported labels and the gradual nature of distraction. Only one Normal day was called *Unusual*.
 #

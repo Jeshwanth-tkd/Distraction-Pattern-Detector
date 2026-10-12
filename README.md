@@ -42,6 +42,7 @@ figures/                        all 18 charts from the notebook
 app/                            web app source (template, exported model, dashboard data)
 docs/index.html                 deployed web app (GitHub Pages)
 reports/Technical_Report.md     technical report
+reports/Learning_Guide.pdf      beginner guide: rebuild the project from zero
 ```
 
 ## Reproduce

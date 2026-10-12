@@ -66,7 +66,7 @@ All validation checks pass: no missing values, one row per user per day (4,800 r
 
 ![Personal baselines](../figures/08_personal_baselines.png)
 
-1. **Baselines differ widely** — normal-day screen time ranges from about 3 h to 9 h between people, so a single threshold cannot work.
+1. **Baselines differ widely** — median normal-day screen time ranges from about 2.5 h to 7.3 h between people, so a single threshold cannot work.
 2. **Raw values overlap across classes; personal z-scores separate them** (Kruskal-Wallis effect sizes and mutual information are highest for z-features).
 
 ![Raw vs z](../figures/07_scatter_raw_vs_z.png)
