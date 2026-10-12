@@ -7,7 +7,7 @@ Total screen time alone does not tell the whole story. This project classifies e
 > Disclaimer: the project identifies usage-pattern changes only. It does not diagnose addiction or any medical or psychological condition.
 
 ## Live app
-* **Web app:** see the link in the repository description (GitHub Pages serves `docs/index.html`).
+* **Web app:** https://jeshwanth-tkd.github.io/Distraction-Pattern-Detector/ (GitHub Pages, served from `docs/index.html`)
 * The trained model runs entirely in the browser: pick an example person and day, or enter your own typical day and today.
 
 ## Results (test month: 1–29 April, 1,160 user-days)
