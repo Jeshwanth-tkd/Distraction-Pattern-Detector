@@ -1,0 +1,528 @@
+<title>Distraction Pattern Detector</title>
+<meta name="description" content="Detects days when a person's digital activity becomes unusually distracted compared with their own 14-day baseline.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working instrument. Tabbed single column (max 1120px); the predictor opens first with inputs left, verdict + personal-baseline strips right. */
+:root {
+  --paper: #f4f6f9; --surface: #ffffff; --sunk: #eceff4; --ink: #151c28; --muted: #586274; --line: #dbe0e8;
+  --accent: #2f55d4; --accent-soft: #e3e9fb;
+  --c0: #23897d; --c1: #c08a12; --c2: #c94a2f;
+  --c0-soft: #dcf0ec; --c1-soft: #f7ecd1; --c2-soft: #f8e0d9;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0e131b; --surface: #151c27; --sunk: #1b2432; --ink: #e5e9f0; --muted: #98a3b5; --line: #263042;
+  --accent: #86a0ff; --accent-soft: #212d4d;
+  --c0: #4cc3b3; --c1: #e8b84a; --c2: #f07f62;
+  --c0-soft: #16332f; --c1-soft: #3a3019; --c2-soft: #3d221b; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #0e131b; --surface: #151c27; --sunk: #1b2432; --ink: #e5e9f0; --muted: #98a3b5; --line: #263042;
+  --accent: #86a0ff; --accent-soft: #212d4d;
+  --c0: #4cc3b3; --c1: #e8b84a; --c2: #f07f62;
+  --c0-soft: #16332f; --c1-soft: #3a3019; --c2-soft: #3d221b; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); font-weight: 700; letter-spacing: -0.01em; max-width: 22ch; }
+h2 { font-size: 1.45rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 500; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--muted); }
+.eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+header.top { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts b { font-family: var(--mono); font-weight: 500; }
+
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-block: 18px 26px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--paper); padding-block: 8px; }
+nav.tabs button { font: 500 .92rem var(--body); color: var(--muted); background: none; border: 1px solid transparent; border-radius: 999px; padding: 7px 15px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); background: var(--surface); border-color: var(--line); }
+nav.tabs button:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+section.panel { display: grid; gap: 26px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 22px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 860px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.block { display: grid; gap: 12px; min-width: 0; }
+
+/* controls */
+.seg { display: inline-flex; background: var(--sunk); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: 500 .85rem var(--body); border: 0; background: none; color: var(--muted); padding: 6px 13px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 .8rem var(--mono); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+label.f { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 10px; font-size: .9rem; }
+.f2 { display: grid; grid-template-columns: minmax(0, 1fr) 80px 80px; align-items: center; gap: 8px; font-size: .9rem; }
+input[type=number], select { font: 500 .9rem var(--mono); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+.fields { display: grid; gap: 8px; }
+.colhead { font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: right; }
+.derived { display: flex; justify-content: space-between; font-size: .85rem; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 8px; }
+
+/* verdict */
+.verdict { display: grid; gap: 4px; padding: 16px 18px; border-radius: var(--r); background: var(--sunk); }
+.verdict .state { font-family: var(--display); font-weight: 700; font-size: 1.7rem; line-height: 1.1; }
+.s0 { color: var(--c0); } .s1 { color: var(--c1); } .s2 { color: var(--c2); }
+.v0 { background: var(--c0-soft); } .v1 { background: var(--c1-soft); } .v2 { background: var(--c2-soft); }
+.probs { display: grid; gap: 7px; }
+.prow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 52px; gap: 10px; align-items: center; font-size: .88rem; }
+.track { height: 10px; background: var(--sunk); border-radius: 5px; overflow: hidden; }
+.fill { height: 100%; border-radius: 5px; transition: width .35s ease; }
+.recorded { font-size: .85rem; }
+.pill { display: inline-block; font: 500 .75rem var(--mono); padding: 2px 8px; border-radius: 999px; }
+
+/* baseline strips */
+.strips { display: grid; gap: 12px; }
+.strip { display: grid; grid-template-columns: 132px minmax(0, 1fr) 58px; gap: 10px; align-items: center; font-size: .86rem; }
+.scale { position: relative; height: 26px; }
+.scale .band { position: absolute; top: 9px; height: 8px; left: 33.33%; width: 33.33%; background: var(--c0-soft); border-radius: 4px; }
+.scale .axis { position: absolute; top: 12.5px; left: 0; right: 0; height: 1px; background: var(--line); }
+.scale .mid { position: absolute; top: 4px; bottom: 4px; left: 50%; width: 1px; background: var(--muted); opacity: .5; }
+.scale .dot { position: absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; border: 2px solid var(--surface); transition: left .35s ease; }
+.ticks { display: grid; grid-template-columns: 132px minmax(0,1fr) 58px; gap: 10px; }
+.ticks div:nth-child(2) { display: flex; justify-content: space-between; font: .68rem var(--mono); color: var(--muted); }
+.z { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* tables */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .87rem; }
+th { text-align: left; font: 500 .72rem var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.n, th.n { text-align: right; }
+tr.best td { background: var(--accent-soft); }
+.cellbar { display: inline-block; height: 6px; border-radius: 3px; background: var(--accent); opacity: .55; vertical-align: middle; margin-right: 6px; }
+
+/* bar charts */
+.bars { display: grid; gap: 7px; }
+.bar { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 54px; gap: 10px; align-items: center; font-size: .85rem; }
+.bar .lab { overflow-wrap: anywhere; }
+.bar .v { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+/* quantile boxes */
+.qrow { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; align-items: center; font-size: .8rem; }
+.qtrack { position: relative; height: 18px; }
+.qwhisk { position: absolute; top: 8px; height: 2px; opacity: .6; }
+.qbox { position: absolute; top: 2px; height: 14px; border-radius: 3px; opacity: .85; }
+.qmed { position: absolute; top: 0; height: 18px; width: 2px; background: var(--ink); }
+.qaxis { display: flex; justify-content: space-between; font: .68rem var(--mono); color: var(--muted); margin-left: 92px; }
+
+/* stacked & dots */
+.stack { display: grid; gap: 6px; }
+.srow { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; align-items: center; font: .8rem var(--mono); }
+.sbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; }
+.dots { position: relative; height: 70px; border-bottom: 1px solid var(--line); }
+.dots span { position: absolute; bottom: 0; width: 8px; margin-left: -4px; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .75; }
+
+.cm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; font: .78rem var(--mono); }
+.cm div { aspect-ratio: 1.6; display: grid; place-items: center; border-radius: 3px; max-width: 100%; }
+.cmgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.cmcard { display: grid; gap: 6px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { border-top: 2px solid var(--accent); padding-top: 8px; display: grid; gap: 2px; }
+.kpi b { font: 500 1.5rem var(--mono); }
+ol.reasons { margin: 0; padding-left: 1.2rem; display: grid; gap: 10px; max-width: 72ch; }
+.note { font-size: .82rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; }
+footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); font-size: .82rem; color: var(--muted); display: grid; gap: 4px; }
+@media (max-width: 520px) {
+  .prow { grid-template-columns: 104px minmax(0,1fr) 46px; }
+  .strip, .ticks { grid-template-columns: 96px minmax(0,1fr) 48px; }
+  .bar { grid-template-columns: 100px minmax(0,1fr) 46px; }
+}
+@media (prefers-reduced-motion: reduce) { .fill, .scale .dot { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">AD23532 Principles of Data Science · Mini project · B.Tech AI &amp; DS</span>
+    <h1>Is today an unusually distracted day for this person?</h1>
+    <p class="muted">The model compares one day of phone and computer use with the same person's previous 14 days. It flags a change in pattern, not a total number of hours.</p>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="predict" aria-selected="true">Predictor</button>
+    <button role="tab" data-tab="data" aria-selected="false">Data &amp; cleaning</button>
+    <button role="tab" data-tab="eda" aria-selected="false">Exploration</button>
+    <button role="tab" data-tab="models" aria-selected="false">Model comparison</button>
+    <button role="tab" data-tab="verdict" aria-selected="false">Final model</button>
+  </nav>
+
+  <!-- PREDICTOR -->
+  <section class="panel" id="tab-predict">
+    <div class="grid2">
+      <div class="box">
+        <div class="seg" role="group" aria-label="Input mode">
+          <button id="m-demo" aria-pressed="true">Example people</button>
+          <button id="m-own" aria-pressed="false">Enter your own day</button>
+        </div>
+
+        <div id="demo-ui" class="block">
+          <div class="block">
+            <span class="eyebrow">Person (real test-period records)</span>
+            <div class="chips" id="people"></div>
+          </div>
+          <div class="block">
+            <span class="eyebrow">Day to score</span>
+            <div class="chips" id="days"></div>
+          </div>
+          <p class="note" id="demo-note"></p>
+          <div class="fields" id="demo-fields"></div>
+          <div class="derived"><span>Total screen time</span><span class="mono" id="demo-total"></span></div>
+        </div>
+
+        <div id="own-ui" class="block" hidden>
+          <p class="note">Enter a typical day for you, then today. Day-to-day spread is estimated from the 40 people in the dataset.</p>
+          <div class="f2"><span></span><span class="colhead">Typical</span><span class="colhead">Today</span></div>
+          <div class="fields" id="own-fields"></div>
+          <div class="derived"><span>Total screen time (typical / today)</span><span class="mono" id="own-total"></span></div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="verdict" id="verdict">
+          <span class="eyebrow">Prediction</span>
+          <span class="state" id="v-state">–</span>
+          <span class="muted" id="v-sub"></span>
+        </div>
+        <div class="probs" id="probs"></div>
+        <div class="recorded" id="recorded"></div>
+        <div class="block">
+          <h3>Today against the personal baseline</h3>
+          <p class="muted" style="font-size:.85rem">Shaded band = this person's usual range (±1σ of the previous 14 days).</p>
+          <div class="strips" id="strips"></div>
+          <div class="ticks"><div></div><div><span>−3σ</span><span>−1σ</span><span>baseline</span><span>+1σ</span><span>+3σ</span></div><div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA -->
+  <section class="panel" id="tab-data" hidden>
+    <div class="block">
+      <h2>Data quality audit</h2>
+      <p class="muted">Daily usage logs for 40 people over 120 days, simulated with a fixed seed because real per-app logs with day labels are private. Realistic recording problems were injected so the cleaning stage has genuine work to do.</p>
+    </div>
+    <div class="kpis" id="data-kpis"></div>
+    <div class="grid2">
+      <div class="box"><h3>Issues found in the raw file</h3><div class="tbl"><table id="issues"></table></div></div>
+      <div class="box"><h3>Cleaning steps applied</h3><div class="tbl"><table id="cleaning"></table></div>
+        <p class="note">Impossible values become missing and are filled with the person's own median. High but real values are kept: distracted days are the outliers the model has to learn.</p></div>
+    </div>
+  </section>
+
+  <!-- EDA -->
+  <section class="panel" id="tab-eda" hidden>
+    <div class="block"><h2>What the data shows</h2></div>
+    <div class="grid2">
+      <div class="box"><h3>Class balance</h3><div class="bars" id="classbal"></div>
+        <p class="note">Imbalanced classes, so models are compared on macro-F1 rather than accuracy.</p></div>
+      <div class="box"><h3>Label mix by day of week</h3><div class="stack" id="weekly"></div><div class="legend" id="leg1"></div></div>
+    </div>
+    <div class="box">
+      <h3>Everyone's normal is different</h3>
+      <p class="muted">Median screen time on normal days, one bar per person, sorted. Baselines run from about <span class="num" id="bl-min"></span> h to <span class="num" id="bl-max"></span> h, so one population threshold cannot work.</p>
+      <div class="dots" id="baselines"></div>
+    </div>
+    <div class="box">
+      <h3>Raw values overlap; personal deviations separate</h3>
+      <div class="seg" id="qsel" role="group" aria-label="Signal"></div>
+      <div class="grid2">
+        <div class="block"><span class="eyebrow" id="q-raw-t"></span><div id="q-raw"></div></div>
+        <div class="block"><span class="eyebrow" id="q-z-t"></span><div id="q-z"></div></div>
+      </div>
+      <p class="note">Boxes show the 25th–75th percentile, the line the median, whiskers the 10th–90th.</p>
+    </div>
+    <div class="box"><h3>Mutual information with the label</h3><div class="bars" id="mi"></div>
+      <div class="legend"><span><i style="background:var(--c2)"></i>personal-baseline feature</span><span><i style="background:var(--accent)"></i>raw or ratio feature</span></div></div>
+  </section>
+
+  <!-- MODELS -->
+  <section class="panel" id="tab-models" hidden>
+    <div class="block"><h2>Six approaches, one test month</h2>
+      <p class="muted">Trained on 8 Jan – 31 Mar, tested on 1 – 29 April (1,160 days). Cross-validation uses 5 folds grouped by person, so each fold is scored on people the model has never seen.</p></div>
+    <div class="box"><h3>All model variants on the test set</h3><div class="tbl"><table id="cmp"></table></div></div>
+    <div class="grid2">
+      <div class="box"><h3>Macro-F1 by model</h3><div class="bars" id="f1bars"></div></div>
+      <div class="box"><h3>Hyperparameter tuning</h3><div class="tbl"><table id="tuning"></table></div>
+        <p class="note">Grid search with person-grouped 5-fold CV for the supervised models; threshold search on training days for the Z-score rule.</p></div>
+    </div>
+    <div class="box"><h3>Confusion matrices (rows = actual, share of each row)</h3><div class="cmgrid" id="cms"></div></div>
+    <div class="grid3">
+      <div class="box"><h3>K-Means quality (k = 3, test days)</h3><div class="tbl"><table id="clus"></table></div>
+        <p class="note">k = 2 scores higher on silhouette (it splits normal from not normal), but the task has three ordered states.</p></div>
+      <div class="box"><h3>Feature-set ablation</h3><div class="tbl"><table id="abl"></table></div></div>
+      <div class="box"><h3>Permutation importance</h3><div class="bars" id="imp"></div></div>
+    </div>
+  </section>
+
+  <!-- VERDICT -->
+  <section class="panel" id="tab-verdict" hidden>
+    <div class="block"><span class="eyebrow">Final selection</span><h2 id="fin-name"></h2></div>
+    <div class="kpis" id="fin-kpis"></div>
+    <div class="box">
+      <h3>Why this model</h3>
+      <ol class="reasons" id="reasons"></ol>
+    </div>
+    <div class="box">
+      <h3>Limitations</h3>
+      <p>The data is simulated, so results must be confirmed on real, consented usage logs. A person needs 7 days of history before a baseline exists. Labels are self-reported and about 7% are noisy, which is why almost every remaining error is between neighbouring classes. The project identifies usage-pattern changes only and does not diagnose addiction or any medical or psychological condition.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Rajalakshmi Engineering College · Principles of Data Science (AD23532) · 2026-27</span>
+    <span>Model runs entirely in your browser; nothing you type is sent anywhere.</span>
+  </footer>
+</div>
+
+<script>
+const MODEL = __MODEL__;
+const D = __DASH__;
+const CLS = ["Normal", "Increased Distraction", "Unusually Distracted"];
+const SHORT = ["Normal", "Increased", "Unusual"];
+const CV = D.user_cv;
+const $ = s => document.querySelector(s);
+const fmt = (x, d = 3) => x == null ? "–" : (+x).toFixed(d);
+const cvar = i => `var(--c${i})`;
+
+/* ---------- tabs ---------- */
+const tabs = [...document.querySelectorAll("nav.tabs button")];
+function showTab(id) {
+  tabs.forEach(b => b.setAttribute("aria-selected", b.dataset.tab === id));
+  document.querySelectorAll("section.panel").forEach(s => s.hidden = s.id !== "tab-" + id);
+  try { localStorage.setItem("tab", id); } catch (e) {}
+}
+tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+const hashTab = location.hash.slice(1);
+if (tabs.some(b => b.dataset.tab === hashTab)) showTab(hashTab);
+
+/* ---------- feature engineering, mirrors notebook section 2.3 ---------- */
+const BASE = ["screen_time_hrs", "social_media_min", "gaming_min", "productive_min", "app_switches",
+              "night_usage_min", "phone_unlocks", "distraction_ratio", "productive_ratio"];
+function enrich(d) {
+  const o = { ...d };
+  o.screen_time_hrs = +(((+d.social_media_min) + (+d.gaming_min) + (+d.productive_min) + (+d.other_min)) / 60).toFixed(2);
+  const tot = o.screen_time_hrs * 60;
+  o.distraction_ratio = (+d.social_media_min + +d.gaming_min) / tot;
+  o.productive_ratio = +d.productive_min / tot;
+  o.switch_rate_per_hr = +d.app_switches / o.screen_time_hrs;
+  o.night_usage_ratio = +d.night_usage_min / tot;
+  o.unlocks_per_hr = +d.phone_unlocks / o.screen_time_hrs;
+  return o;
+}
+const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+const sd = a => { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+// baseline = {col: [mu, sd]}; today = enriched day
+function features(today, baseline) {
+  const f = { ...today };
+  for (const c of BASE) {
+    const [mu, s] = baseline[c];
+    const s2 = Math.max(s, 0.10 * Math.abs(mu) + 1e-6);
+    f["z_" + c] = (today[c] - mu) / s2;
+  }
+  f.deviation_score = (f.z_social_media_min + f.z_gaming_min + f.z_app_switches + f.z_night_usage_min - f.z_productive_min) / 5;
+  return f;
+}
+function baselineFromHistory(days) {
+  const e = days.map(enrich), b = {};
+  for (const c of BASE) { const v = e.map(d => d[c]); b[c] = [mean(v), sd(v)]; }
+  return b;
+}
+function baselineFromTypical(typ) {
+  const e = enrich(typ), b = {};
+  for (const c of BASE) b[c] = [e[c], e[c] * (CV[c] ?? 0.3)];
+  return b;
+}
+function predict(f) {
+  const x = MODEL.features.map(n => f[n]);
+  if (MODEL.type === "logreg") {
+    const xs = x.map((v, i) => (v - MODEL.mean[i]) / MODEL.scale[i]);
+    const lg = MODEL.coef.map((w, k) => w.reduce((s, wi, i) => s + wi * xs[i], MODEL.intercept[k]));
+    const m = Math.max(...lg), e = lg.map(v => Math.exp(v - m)), t = e.reduce((a, b) => a + b, 0);
+    return e.map(v => v / t);
+  }
+  const p = [0, 0, 0];
+  for (const t of MODEL.trees) { let n = 0; while (t.l[n] !== -1) n = x[t.f[n]] <= t.t[n] ? t.l[n] : t.r[n]; t.v[n].forEach((v, k) => p[k] += v / MODEL.trees.length); }
+  return p;
+}
+
+/* ---------- predictor UI ---------- */
+const INPUTS = [
+  ["social_media_min", "Social media (min)"], ["gaming_min", "Gaming (min)"], ["productive_min", "Productive work (min)"],
+  ["other_min", "Other apps (min)"], ["app_switches", "App switches"], ["night_usage_min", "Night use 23:00–05:00 (min)"],
+  ["phone_unlocks", "Phone unlocks"], ["notifications", "Notifications"]];
+const STRIPS = [["z_social_media_min", "Social media"], ["z_gaming_min", "Gaming"], ["z_productive_min", "Productive time"],
+  ["z_app_switches", "App switching"], ["z_night_usage_min", "Night use"], ["z_screen_time_hrs", "Total screen time"]];
+
+let mode = "demo", person = Object.keys(D.demo)[0], dayIdx = 0;
+const demoVals = {};
+const OWN_TYP = { social_media_min: 60, gaming_min: 30, productive_min: 140, other_min: 70, app_switches: 55, night_usage_min: 20, phone_unlocks: 65, notifications: 100 };
+const OWN_TODAY = { social_media_min: 150, gaming_min: 80, productive_min: 70, other_min: 80, app_switches: 115, night_usage_min: 55, phone_unlocks: 95, notifications: 120 };
+
+function render(proba, f, recordedLabel) {
+  const k = proba.indexOf(Math.max(...proba));
+  $("#verdict").className = "verdict v" + k;
+  $("#v-state").className = "state s" + k;
+  $("#v-state").textContent = CLS[k];
+  $("#v-sub").textContent = `${(proba[k] * 100).toFixed(0)}% probability · deviation score ${f.deviation_score >= 0 ? "+" : ""}${f.deviation_score.toFixed(2)}σ`;
+  $("#probs").innerHTML = proba.map((p, i) => `<div class="prow"><span>${CLS[i]}</span><div class="track"><div class="fill" style="width:${(p * 100).toFixed(1)}%;background:${cvar(i)}"></div></div><span class="z">${(p * 100).toFixed(1)}%</span></div>`).join("");
+  $("#recorded").innerHTML = recordedLabel ? `Recorded label for this day: <span class="pill ${"v" + CLS.indexOf(recordedLabel)} ${"s" + CLS.indexOf(recordedLabel)}">${recordedLabel}</span> ${recordedLabel === CLS[k] ? "· model agrees" : "· model disagrees"}` : "";
+  $("#strips").innerHTML = STRIPS.map(([key, name]) => {
+    const z = f[key], cl = Math.max(-3, Math.min(3, z)), pos = (cl + 3) / 6 * 100;
+    const bad = key === "z_productive_min" ? -z : z;
+    const col = bad > 2 ? "var(--c2)" : bad > 1 ? "var(--c1)" : "var(--c0)";
+    return `<div class="strip"><span>${name}</span><div class="scale"><div class="axis"></div><div class="band"></div><div class="mid"></div><div class="dot" style="left:${pos}%;background:${col}"></div></div><span class="z">${z >= 0 ? "+" : ""}${z.toFixed(1)}σ</span></div>`;
+  }).join("");
+}
+
+function fieldRow(id, label, val) {
+  return `<label class="f" for="${id}"><span>${label}</span><input type="number" min="0" step="1" id="${id}" value="${val}"></label>`;
+}
+function buildDemo() {
+  $("#people").innerHTML = Object.entries(D.demo).map(([u, v]) => `<button class="chip" aria-pressed="${u === person}" data-u="${u}">${u} · ${v.type}</button>`).join("");
+  document.querySelectorAll("#people .chip").forEach(b => b.onclick = () => { person = b.dataset.u; dayIdx = 0; buildDemo(); });
+  const nd = D.demo[person].next_days;
+  $("#days").innerHTML = nd.map((d, i) => `<button class="chip" aria-pressed="${i === dayIdx}" data-i="${i}">${d.date}</button>`).join("");
+  document.querySelectorAll("#days .chip").forEach(b => b.onclick = () => { dayIdx = +b.dataset.i; buildDemo(); });
+  const day = nd[dayIdx];
+  $("#demo-fields").innerHTML = INPUTS.map(([k, l]) => fieldRow("d_" + k, l, day[k])).join("");
+  INPUTS.forEach(([k]) => $("#d_" + k).addEventListener("input", runDemo));
+  $("#demo-note").textContent = `Baseline built from ${person}'s previous 14 recorded days. Edit any value to see how the prediction moves.`;
+  runDemo();
+}
+function demoWindow() {
+  const h = D.demo[person].history, nd = D.demo[person].next_days;
+  const n = h.screen_time_hrs.length;
+  const hist = [...Array(n).keys()].map(i => Object.fromEntries(Object.keys(h).map(k => [k, h[k][i]])));
+  return hist.concat(nd.slice(0, dayIdx)).slice(-MODEL.window);
+}
+function readFields(prefix) {
+  return Object.fromEntries(INPUTS.map(([k]) => [k, Math.max(0, +($(prefix + k).value) || 0)]));
+}
+function runDemo() {
+  const today = enrich(readFields("#d_"));
+  $("#demo-total").textContent = today.screen_time_hrs.toFixed(2) + " h";
+  const f = features(today, baselineFromHistory(demoWindow()));
+  const day = D.demo[person].next_days[dayIdx];
+  const edited = INPUTS.some(([k]) => +$("#d_" + k).value !== +day[k]);
+  render(predict(f), f, edited ? null : day.label);
+}
+function buildOwn() {
+  $("#own-fields").innerHTML = INPUTS.map(([k, l]) => `<div class="f2"><label for="t_${k}">${l}</label><input type="number" min="0" id="t_${k}" value="${OWN_TYP[k]}" aria-label="${l} typical"><input type="number" min="0" id="o_${k}" value="${OWN_TODAY[k]}" aria-label="${l} today"></div>`).join("");
+  INPUTS.forEach(([k]) => { $("#t_" + k).addEventListener("input", runOwn); $("#o_" + k).addEventListener("input", runOwn); });
+}
+function runOwn() {
+  const typ = readFields("#t_"), today = enrich(readFields("#o_"));
+  $("#own-total").textContent = `${enrich(typ).screen_time_hrs.toFixed(1)} h / ${today.screen_time_hrs.toFixed(1)} h`;
+  const f = features(today, baselineFromTypical(typ));
+  render(predict(f), f, null);
+}
+function setMode(m) {
+  mode = m;
+  $("#m-demo").setAttribute("aria-pressed", m === "demo"); $("#m-own").setAttribute("aria-pressed", m === "own");
+  $("#demo-ui").hidden = m !== "demo"; $("#own-ui").hidden = m !== "own";
+  m === "demo" ? runDemo() : runOwn();
+}
+$("#m-demo").onclick = () => setMode("demo");
+$("#m-own").onclick = () => setMode("own");
+
+/* ---------- static sections ---------- */
+const ds = D.dataset;
+$("#facts").innerHTML = [["People", ds.users], ["Days each", ds.days], ["Modelled user-days", ds.model_rows.toLocaleString()], ["Features", ds.n_features], ["Final model", D.final.replace(" (tuned)", "")]]
+  .map(([a, b]) => `<div><span class="muted">${a}</span><b>${b}</b></div>`).join("");
+
+$("#data-kpis").innerHTML = [["Raw rows", ds.raw_rows.toLocaleString()], ["Clean rows", ds.clean_rows.toLocaleString()], ["Train / test", `${ds.train_rows.toLocaleString()} / ${ds.test_rows.toLocaleString()}`], ["Raw columns", ds.raw_cols]]
+  .map(([a, b]) => `<div class="kpi"><span class="eyebrow">${a}</span><b>${b}</b></div>`).join("");
+$("#issues").innerHTML = `<tr><th>Issue</th><th>Column</th><th class="n">Rows</th></tr>` + D.issues.map(r => `<tr><td>${r[0]}</td><td class="mono">${r[1]}</td><td class="n">${r[2]}</td></tr>`).join("");
+$("#cleaning").innerHTML = `<tr><th>Step</th><th class="n">Rows</th></tr>` + D.cleaning.map(r => `<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join("");
+
+function bars(el, items, max, colorFn, dec = 3) {
+  $(el).innerHTML = items.map(([lab, v], i) => `<div class="bar"><span class="lab">${lab}</span><div class="track"><div class="fill" style="width:${Math.max(0, v) / max * 100}%;background:${colorFn(lab, i)}"></div></div><span class="v">${typeof v === "number" ? v.toFixed(dec) : v}</span></div>`).join("");
+}
+const tot = D.class_counts.reduce((a, b) => a + b, 0);
+bars("#classbal", D.class_counts.map((c, i) => [CLS[i], c]), Math.max(...D.class_counts), (l, i) => cvar(i), 0);
+$("#classbal").querySelectorAll(".v").forEach((e, i) => e.textContent = (D.class_counts[i] / tot * 100).toFixed(0) + "%");
+
+const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+$("#weekly").innerHTML = DOW.map((d, j) => `<div class="srow"><span>${d}</span><div class="sbar">${CLS.map((c, i) => `<div title="${c}: ${D.weekly_pct[c][j]}%" style="width:${D.weekly_pct[c][j]}%;background:${cvar(i)}"></div>`).join("")}</div></div>`).join("");
+$("#leg1").innerHTML = CLS.map((c, i) => `<span><i style="background:${cvar(i)}"></i>${c}</span>`).join("");
+
+const bl = Object.values(D.baselines), blMax = Math.ceil(Math.max(...bl));
+$("#bl-min").textContent = Math.min(...bl).toFixed(1); $("#bl-max").textContent = Math.max(...bl).toFixed(1);
+$("#baselines").innerHTML = bl.map((v, i) => `<span title="${Object.keys(D.baselines)[i]}: ${v} h" style="left:${(i + .5) / bl.length * 100}%;height:${v / blMax * 100}%"></span>`).join("");
+
+const QS = [["app_switches", "z_app_switches", "App switches"], ["productive_min", "z_productive_min", "Productive min"],
+            ["social_media_min", "z_social_media_min", "Social min"], ["night_usage_min", "z_night_usage_min", "Night min"]];
+let qi = 0;
+function qplot(el, data, unit) {
+  const all = Object.values(data).flat(), lo = Math.min(...all), hi = Math.max(...all), sc = v => (v - lo) / (hi - lo) * 100;
+  $(el).innerHTML = CLS.map((c, i) => { const q = data[c]; return `<div class="qrow"><span>${SHORT[i]}</span><div class="qtrack">
+    <div class="qwhisk" style="left:${sc(q[0])}%;width:${sc(q[4]) - sc(q[0])}%;background:${cvar(i)}"></div>
+    <div class="qbox" style="left:${sc(q[1])}%;width:${sc(q[3]) - sc(q[1])}%;background:${cvar(i)}"></div>
+    <div class="qmed" style="left:${sc(q[2])}%"></div></div></div>`; }).join("") +
+    `<div class="qaxis"><span>${lo.toFixed(1)}${unit}</span><span>${((lo + hi) / 2).toFixed(1)}${unit}</span><span>${hi.toFixed(1)}${unit}</span></div>`;
+}
+function buildQ() {
+  $("#qsel").innerHTML = QS.map((q, i) => `<button aria-pressed="${i === qi}" data-i="${i}">${q[2]}</button>`).join("");
+  $("#qsel").querySelectorAll("button").forEach(b => b.onclick = () => { qi = +b.dataset.i; buildQ(); });
+  const [r, z, n] = QS[qi];
+  $("#q-raw-t").textContent = `Raw ${n}`; $("#q-z-t").textContent = `Deviation from own baseline (σ)`;
+  qplot("#q-raw", D.box_raw[r], ""); qplot("#q-z", D.box_z[z], "σ");
+}
+buildQ();
+
+const miE = Object.entries(D.mutual_info);
+bars("#mi", miE, Math.max(...miE.map(e => e[1])), l => l.startsWith("z_") || l === "deviation_score" ? "var(--c2)" : "var(--accent)");
+
+/* models */
+const M = D.comparison, names = Object.keys(M);
+const cols = ["Accuracy", "Precision (macro)", "Recall (macro)", "F1 (macro)", "F1 Unusual", "ROC-AUC (OvR)", "CV F1 (macro)"];
+const order = names.slice().sort((a, b) => M[b]["F1 (macro)"] - M[a]["F1 (macro)"]);
+const colMax = Object.fromEntries(cols.map(c => [c, Math.max(...names.map(n => M[n][c] ?? -1))]));
+$("#cmp").innerHTML = `<tr><th>Model</th>${cols.map(c => `<th class="n">${c.replace(" (macro)", "").replace(" (OvR)", "")}</th>`).join("")}</tr>` +
+  order.map(n => `<tr class="${n === D.final ? "best" : ""}"><td>${n}</td>${cols.map(c => `<td class="n" style="${M[n][c] === colMax[c] ? "font-weight:600" : ""}">${fmt(M[n][c])}</td>`).join("")}</tr>`).join("");
+bars("#f1bars", order.map(n => [n, M[n]["F1 (macro)"]]), 1, l => l === D.final ? "var(--c0)" : "var(--accent)");
+$("#tuning").innerHTML = `<tr><th>Model</th><th>Best setting</th><th class="n">Before</th><th class="n">After</th></tr>` +
+  D.tuning.map(r => `<tr><td>${r[0]}</td><td class="mono" style="font-size:.75rem">${r[1].replace(/[{}']/g, "").replace(/clf__/g, "")}</td><td class="n">${fmt(r[2])}</td><td class="n">${fmt(r[3])}</td></tr>`).join("");
+$("#cms").innerHTML = order.map(n => {
+  const m = D.confusion[n], rows = m.map(r => { const s = r.reduce((a, b) => a + b, 0); return r.map(v => v / s); });
+  return `<div class="cmcard"><span style="font-size:.85rem">${n}</span><div class="cm">${rows.flat().map((v, i) =>
+    `<div title="actual ${SHORT[Math.floor(i / 3)]}, predicted ${SHORT[i % 3]}" style="background:color-mix(in srgb, var(--accent) ${Math.round(v * 85)}%, var(--sunk));color:${v > .55 ? "#fff" : "var(--ink)"}">${v.toFixed(2)}</div>`).join("")}</div></div>`;
+}).join("");
+$("#clus").innerHTML = `<tr><th>Metric</th><th class="n">Value</th></tr>` + Object.entries(D.clustering).map(([k, v]) => `<tr><td>${k}</td><td class="n">${fmt(v)}</td></tr>`).join("") +
+  `<tr><td>Best k by silhouette</td><td class="n">${D.k_selection.reduce((a, b) => b[2] > a[2] ? b : a)[0]}</td></tr>`;
+$("#abl").innerHTML = `<tr><th>Features</th><th class="n">LR F1</th><th class="n">RF F1</th></tr>` + D.ablation.map(r => `<tr><td>${r[0]}</td><td class="n">${fmt(r[2])}</td><td class="n">${fmt(r[3])}</td></tr>`).join("");
+const impE = Object.entries(D.importance).slice(0, 8);
+bars("#imp", impE.map(([k, v]) => [k, v]), Math.max(...impE.map(e => e[1])), l => l.startsWith("z_") || l === "deviation_score" ? "var(--c2)" : "var(--accent)");
+
+/* verdict */
+const F = M[D.final], R = M[D.runner_up];
+$("#fin-name").textContent = `Tuned ${D.final.replace(" (tuned)", "")}`;
+$("#fin-kpis").innerHTML = [["Test accuracy", F.Accuracy], ["Macro-F1", F["F1 (macro)"]], ["F1, Unusual days", F["F1 Unusual"]], ["ROC-AUC", F["ROC-AUC (OvR)"]], ["CV macro-F1", F["CV F1 (macro)"]]]
+  .map(([a, b]) => `<div class="kpi"><span class="eyebrow">${a}</span><b>${fmt(b)}</b></div>`).join("");
+const zb = M["Z-score baseline"]["F1 (macro)"], abl = D.ablation;
+$("#reasons").innerHTML = [
+  `Highest test macro-F1 (${fmt(F["F1 (macro)"])}), accuracy, F1 on Unusual days and ROC-AUC of all ten model variants.`,
+  `Statistically tied with the runner-up ${D.runner_up}: the test F1 gap is ${fmt(F["F1 (macro)"] - R["F1 (macro)"])} (95% bootstrap CI ${fmt(D.f1_diff_ci[0])} to ${fmt(D.f1_diff_ci[1])}, McNemar p = ${fmt(D.mcnemar_p)}), and the forest's slightly higher CV score (${fmt(R["CV F1 (macro)"])} vs ${fmt(F["CV F1 (macro)"])}) is within its fold-to-fold spread of ±${fmt(D.cv_std[D.runner_up])}. With equal accuracy the simpler model is preferred: more stable across unseen people (±${fmt(D.cv_std[D.final])}), calibrated probabilities, readable coefficients and a ${(JSON.stringify(MODEL).length / 1024).toFixed(1)} kB file that runs in this page.`,
+  `Learns how much each deviation matters, where the Z-score rule weighs every signal equally: +${fmt(F["F1 (macro)"] - zb)} macro-F1 over the 1σ/2σ rule.`,
+  `Knows the direction of a change. Isolation Forest and K-Means flag unusual days, but an unusually productive day looks as anomalous to them as a distracted one.`,
+  `Expressing each day as a deviation from the person's own 14-day baseline makes the boundary close to linear: the linear model gains ${fmt(abl[2][2] - abl[0][2])} F1 from the ratio and baseline features, the forest only ${fmt(abl[2][3] - abl[0][3])}.`
+].map(t => `<li>${t}</li>`).join("");
+
+buildDemo(); buildOwn();
+try { const t = localStorage.getItem("tab"); if (!hashTab && t && tabs.some(b => b.dataset.tab === t)) showTab(t); } catch (e) {}
+</script>

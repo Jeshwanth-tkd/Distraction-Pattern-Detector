@@ -1,0 +1,529 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style></head><body><title>Distraction Pattern Detector</title>
+<meta name="description" content="Detects days when a person's digital activity becomes unusually distracted compared with their own 14-day baseline.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a working instrument. Tabbed single column (max 1120px); the predictor opens first with inputs left, verdict + personal-baseline strips right. */
+:root {
+  --paper: #f4f6f9; --surface: #ffffff; --sunk: #eceff4; --ink: #151c28; --muted: #586274; --line: #dbe0e8;
+  --accent: #2f55d4; --accent-soft: #e3e9fb;
+  --c0: #23897d; --c1: #c08a12; --c2: #c94a2f;
+  --c0-soft: #dcf0ec; --c1-soft: #f7ecd1; --c2-soft: #f8e0d9;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #0e131b; --surface: #151c27; --sunk: #1b2432; --ink: #e5e9f0; --muted: #98a3b5; --line: #263042;
+  --accent: #86a0ff; --accent-soft: #212d4d;
+  --c0: #4cc3b3; --c1: #e8b84a; --c2: #f07f62;
+  --c0-soft: #16332f; --c1-soft: #3a3019; --c2-soft: #3d221b; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #0e131b; --surface: #151c27; --sunk: #1b2432; --ink: #e5e9f0; --muted: #98a3b5; --line: #263042;
+  --accent: #86a0ff; --accent-soft: #212d4d;
+  --c0: #4cc3b3; --c1: #e8b84a; --c2: #f07f62;
+  --c0-soft: #16332f; --c1-soft: #3a3019; --c2-soft: #3d221b; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); font-weight: 700; letter-spacing: -0.01em; max-width: 22ch; }
+h2 { font-size: 1.45rem; font-weight: 700; }
+h3 { font-size: 1.05rem; font-weight: 500; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--muted); }
+.eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+header.top { display: grid; gap: 14px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.facts div { display: flex; gap: 6px; align-items: baseline; }
+.facts b { font-family: var(--mono); font-weight: 500; }
+
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-block: 18px 26px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--paper); padding-block: 8px; }
+nav.tabs button { font: 500 .92rem var(--body); color: var(--muted); background: none; border: 1px solid transparent; border-radius: 999px; padding: 7px 15px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { color: var(--ink); background: var(--surface); border-color: var(--line); }
+nav.tabs button:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+section.panel { display: grid; gap: 26px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 22px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 860px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.block { display: grid; gap: 12px; min-width: 0; }
+
+/* controls */
+.seg { display: inline-flex; background: var(--sunk); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: 500 .85rem var(--body); border: 0; background: none; color: var(--muted); padding: 6px 13px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 500 .8rem var(--mono); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+label.f { display: grid; grid-template-columns: minmax(0, 1fr) 88px; align-items: center; gap: 10px; font-size: .9rem; }
+.f2 { display: grid; grid-template-columns: minmax(0, 1fr) 80px 80px; align-items: center; gap: 8px; font-size: .9rem; }
+input[type=number], select { font: 500 .9rem var(--mono); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+.fields { display: grid; gap: 8px; }
+.colhead { font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: right; }
+.derived { display: flex; justify-content: space-between; font-size: .85rem; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 8px; }
+
+/* verdict */
+.verdict { display: grid; gap: 4px; padding: 16px 18px; border-radius: var(--r); background: var(--sunk); }
+.verdict .state { font-family: var(--display); font-weight: 700; font-size: 1.7rem; line-height: 1.1; }
+.s0 { color: var(--c0); } .s1 { color: var(--c1); } .s2 { color: var(--c2); }
+.v0 { background: var(--c0-soft); } .v1 { background: var(--c1-soft); } .v2 { background: var(--c2-soft); }
+.probs { display: grid; gap: 7px; }
+.prow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 52px; gap: 10px; align-items: center; font-size: .88rem; }
+.track { height: 10px; background: var(--sunk); border-radius: 5px; overflow: hidden; }
+.fill { height: 100%; border-radius: 5px; transition: width .35s ease; }
+.recorded { font-size: .85rem; }
+.pill { display: inline-block; font: 500 .75rem var(--mono); padding: 2px 8px; border-radius: 999px; }
+
+/* baseline strips */
+.strips { display: grid; gap: 12px; }
+.strip { display: grid; grid-template-columns: 132px minmax(0, 1fr) 58px; gap: 10px; align-items: center; font-size: .86rem; }
+.scale { position: relative; height: 26px; }
+.scale .band { position: absolute; top: 9px; height: 8px; left: 33.33%; width: 33.33%; background: var(--c0-soft); border-radius: 4px; }
+.scale .axis { position: absolute; top: 12.5px; left: 0; right: 0; height: 1px; background: var(--line); }
+.scale .mid { position: absolute; top: 4px; bottom: 4px; left: 50%; width: 1px; background: var(--muted); opacity: .5; }
+.scale .dot { position: absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; border: 2px solid var(--surface); transition: left .35s ease; }
+.ticks { display: grid; grid-template-columns: 132px minmax(0,1fr) 58px; gap: 10px; }
+.ticks div:nth-child(2) { display: flex; justify-content: space-between; font: .68rem var(--mono); color: var(--muted); }
+.z { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* tables */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .87rem; }
+th { text-align: left; font: 500 .72rem var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.n, th.n { text-align: right; }
+tr.best td { background: var(--accent-soft); }
+.cellbar { display: inline-block; height: 6px; border-radius: 3px; background: var(--accent); opacity: .55; vertical-align: middle; margin-right: 6px; }
+
+/* bar charts */
+.bars { display: grid; gap: 7px; }
+.bar { display: grid; grid-template-columns: minmax(110px, 190px) minmax(0, 1fr) 54px; gap: 10px; align-items: center; font-size: .85rem; }
+.bar .lab { overflow-wrap: anywhere; }
+.bar .v { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+/* quantile boxes */
+.qrow { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; align-items: center; font-size: .8rem; }
+.qtrack { position: relative; height: 18px; }
+.qwhisk { position: absolute; top: 8px; height: 2px; opacity: .6; }
+.qbox { position: absolute; top: 2px; height: 14px; border-radius: 3px; opacity: .85; }
+.qmed { position: absolute; top: 0; height: 18px; width: 2px; background: var(--ink); }
+.qaxis { display: flex; justify-content: space-between; font: .68rem var(--mono); color: var(--muted); margin-left: 92px; }
+
+/* stacked & dots */
+.stack { display: grid; gap: 6px; }
+.srow { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px; align-items: center; font: .8rem var(--mono); }
+.sbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; }
+.dots { position: relative; height: 70px; border-bottom: 1px solid var(--line); }
+.dots span { position: absolute; bottom: 0; width: 8px; margin-left: -4px; border-radius: 4px 4px 0 0; background: var(--accent); opacity: .75; }
+
+.cm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; font: .78rem var(--mono); }
+.cm div { aspect-ratio: 1.6; display: grid; place-items: center; border-radius: 3px; max-width: 100%; }
+.cmgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.cmcard { display: grid; gap: 6px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.kpi { border-top: 2px solid var(--accent); padding-top: 8px; display: grid; gap: 2px; }
+.kpi b { font: 500 1.5rem var(--mono); }
+ol.reasons { margin: 0; padding-left: 1.2rem; display: grid; gap: 10px; max-width: 72ch; }
+.note { font-size: .82rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; }
+footer { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); font-size: .82rem; color: var(--muted); display: grid; gap: 4px; }
+@media (max-width: 520px) {
+  .prow { grid-template-columns: 104px minmax(0,1fr) 46px; }
+  .strip, .ticks { grid-template-columns: 96px minmax(0,1fr) 48px; }
+  .bar { grid-template-columns: 100px minmax(0,1fr) 46px; }
+}
+@media (prefers-reduced-motion: reduce) { .fill, .scale .dot { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">AD23532 Principles of Data Science · Mini project · B.Tech AI &amp; DS</span>
+    <h1>Is today an unusually distracted day for this person?</h1>
+    <p class="muted">The model compares one day of phone and computer use with the same person's previous 14 days. It flags a change in pattern, not a total number of hours.</p>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="predict" aria-selected="true">Predictor</button>
+    <button role="tab" data-tab="data" aria-selected="false">Data &amp; cleaning</button>
+    <button role="tab" data-tab="eda" aria-selected="false">Exploration</button>
+    <button role="tab" data-tab="models" aria-selected="false">Model comparison</button>
+    <button role="tab" data-tab="verdict" aria-selected="false">Final model</button>
+  </nav>
+
+  <!-- PREDICTOR -->
+  <section class="panel" id="tab-predict">
+    <div class="grid2">
+      <div class="box">
+        <div class="seg" role="group" aria-label="Input mode">
+          <button id="m-demo" aria-pressed="true">Example people</button>
+          <button id="m-own" aria-pressed="false">Enter your own day</button>
+        </div>
+
+        <div id="demo-ui" class="block">
+          <div class="block">
+            <span class="eyebrow">Person (real test-period records)</span>
+            <div class="chips" id="people"></div>
+          </div>
+          <div class="block">
+            <span class="eyebrow">Day to score</span>
+            <div class="chips" id="days"></div>
+          </div>
+          <p class="note" id="demo-note"></p>
+          <div class="fields" id="demo-fields"></div>
+          <div class="derived"><span>Total screen time</span><span class="mono" id="demo-total"></span></div>
+        </div>
+
+        <div id="own-ui" class="block" hidden>
+          <p class="note">Enter a typical day for you, then today. Day-to-day spread is estimated from the 40 people in the dataset.</p>
+          <div class="f2"><span></span><span class="colhead">Typical</span><span class="colhead">Today</span></div>
+          <div class="fields" id="own-fields"></div>
+          <div class="derived"><span>Total screen time (typical / today)</span><span class="mono" id="own-total"></span></div>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="verdict" id="verdict">
+          <span class="eyebrow">Prediction</span>
+          <span class="state" id="v-state">–</span>
+          <span class="muted" id="v-sub"></span>
+        </div>
+        <div class="probs" id="probs"></div>
+        <div class="recorded" id="recorded"></div>
+        <div class="block">
+          <h3>Today against the personal baseline</h3>
+          <p class="muted" style="font-size:.85rem">Shaded band = this person's usual range (±1σ of the previous 14 days).</p>
+          <div class="strips" id="strips"></div>
+          <div class="ticks"><div></div><div><span>−3σ</span><span>−1σ</span><span>baseline</span><span>+1σ</span><span>+3σ</span></div><div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA -->
+  <section class="panel" id="tab-data" hidden>
+    <div class="block">
+      <h2>Data quality audit</h2>
+      <p class="muted">Daily usage logs for 40 people over 120 days, simulated with a fixed seed because real per-app logs with day labels are private. Realistic recording problems were injected so the cleaning stage has genuine work to do.</p>
+    </div>
+    <div class="kpis" id="data-kpis"></div>
+    <div class="grid2">
+      <div class="box"><h3>Issues found in the raw file</h3><div class="tbl"><table id="issues"></table></div></div>
+      <div class="box"><h3>Cleaning steps applied</h3><div class="tbl"><table id="cleaning"></table></div>
+        <p class="note">Impossible values become missing and are filled with the person's own median. High but real values are kept: distracted days are the outliers the model has to learn.</p></div>
+    </div>
+  </section>
+
+  <!-- EDA -->
+  <section class="panel" id="tab-eda" hidden>
+    <div class="block"><h2>What the data shows</h2></div>
+    <div class="grid2">
+      <div class="box"><h3>Class balance</h3><div class="bars" id="classbal"></div>
+        <p class="note">Imbalanced classes, so models are compared on macro-F1 rather than accuracy.</p></div>
+      <div class="box"><h3>Label mix by day of week</h3><div class="stack" id="weekly"></div><div class="legend" id="leg1"></div></div>
+    </div>
+    <div class="box">
+      <h3>Everyone's normal is different</h3>
+      <p class="muted">Median screen time on normal days, one bar per person, sorted. Baselines run from about <span class="num" id="bl-min"></span> h to <span class="num" id="bl-max"></span> h, so one population threshold cannot work.</p>
+      <div class="dots" id="baselines"></div>
+    </div>
+    <div class="box">
+      <h3>Raw values overlap; personal deviations separate</h3>
+      <div class="seg" id="qsel" role="group" aria-label="Signal"></div>
+      <div class="grid2">
+        <div class="block"><span class="eyebrow" id="q-raw-t"></span><div id="q-raw"></div></div>
+        <div class="block"><span class="eyebrow" id="q-z-t"></span><div id="q-z"></div></div>
+      </div>
+      <p class="note">Boxes show the 25th–75th percentile, the line the median, whiskers the 10th–90th.</p>
+    </div>
+    <div class="box"><h3>Mutual information with the label</h3><div class="bars" id="mi"></div>
+      <div class="legend"><span><i style="background:var(--c2)"></i>personal-baseline feature</span><span><i style="background:var(--accent)"></i>raw or ratio feature</span></div></div>
+  </section>
+
+  <!-- MODELS -->
+  <section class="panel" id="tab-models" hidden>
+    <div class="block"><h2>Six approaches, one test month</h2>
+      <p class="muted">Trained on 8 Jan – 31 Mar, tested on 1 – 29 April (1,160 days). Cross-validation uses 5 folds grouped by person, so each fold is scored on people the model has never seen.</p></div>
+    <div class="box"><h3>All model variants on the test set</h3><div class="tbl"><table id="cmp"></table></div></div>
+    <div class="grid2">
+      <div class="box"><h3>Macro-F1 by model</h3><div class="bars" id="f1bars"></div></div>
+      <div class="box"><h3>Hyperparameter tuning</h3><div class="tbl"><table id="tuning"></table></div>
+        <p class="note">Grid search with person-grouped 5-fold CV for the supervised models; threshold search on training days for the Z-score rule.</p></div>
+    </div>
+    <div class="box"><h3>Confusion matrices (rows = actual, share of each row)</h3><div class="cmgrid" id="cms"></div></div>
+    <div class="grid3">
+      <div class="box"><h3>K-Means quality (k = 3, test days)</h3><div class="tbl"><table id="clus"></table></div>
+        <p class="note">k = 2 scores higher on silhouette (it splits normal from not normal), but the task has three ordered states.</p></div>
+      <div class="box"><h3>Feature-set ablation</h3><div class="tbl"><table id="abl"></table></div></div>
+      <div class="box"><h3>Permutation importance</h3><div class="bars" id="imp"></div></div>
+    </div>
+  </section>
+
+  <!-- VERDICT -->
+  <section class="panel" id="tab-verdict" hidden>
+    <div class="block"><span class="eyebrow">Final selection</span><h2 id="fin-name"></h2></div>
+    <div class="kpis" id="fin-kpis"></div>
+    <div class="box">
+      <h3>Why this model</h3>
+      <ol class="reasons" id="reasons"></ol>
+    </div>
+    <div class="box">
+      <h3>Limitations</h3>
+      <p>The data is simulated, so results must be confirmed on real, consented usage logs. A person needs 7 days of history before a baseline exists. Labels are self-reported and about 7% are noisy, which is why almost every remaining error is between neighbouring classes. The project identifies usage-pattern changes only and does not diagnose addiction or any medical or psychological condition.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Rajalakshmi Engineering College · Principles of Data Science (AD23532) · 2026-27</span>
+    <span>Model runs entirely in your browser; nothing you type is sent anywhere.</span>
+  </footer>
+</div>
+
+<script>
+const MODEL = {"type":"logreg","mean":[5.291268,93.636994,50.874747,85.15631,71.785417,29.101637,82.147917,111.477381,0.42804,0.28593,14.684021,0.096258,16.930389,0.055278,0.115547,0.123995,-0.003219,0.09202,0.12382,0.073118,0.058576,-0.022451,0.09172],"scale":[1.72701,78.308073,50.265244,51.314831,30.043759,19.926749,32.555811,43.716839,0.203947,0.168973,7.11118,0.067555,8.255859,1.223787,1.395083,1.393354,1.115026,1.317469,1.413349,1.2645,1.181595,1.127607,1.081859],"coef":[[-0.308951,-0.284307,-0.023498,0.071443,-0.523438,-0.292964,-0.380885,-0.406299,0.15171,-0.006401,-0.326771,-0.129745,-0.044268,-0.125006,-0.375679,-0.380315,0.071622,0.095635,-0.289657,-0.133723,-0.254936,0.095003,-0.262006],[0.00745,0.050034,-0.009501,-0.030202,-0.018775,0.018611,0.048462,-0.039816,-0.077125,-0.003975,0.034372,0.041657,-0.07289,0.001982,0.160526,0.038083,0.204089,-0.044014,0.084364,0.006763,0.146743,0.04495,0.020464],[0.301501,0.234274,0.032999,-0.04124,0.542214,0.274353,0.332424,0.446115,-0.074585,0.010375,0.2924,0.088087,0.117158,0.123023,0.215153,0.342233,-0.275711,-0.051621,0.205293,0.12696,0.108193,-0.139952,0.241542]],"intercept":[1.081953,1.069192,-2.151145],"name":"Logistic Regression (tuned)","features":["screen_time_hrs","social_media_min","gaming_min","productive_min","app_switches","night_usage_min","phone_unlocks","notifications","distraction_ratio","productive_ratio","switch_rate_per_hr","night_usage_ratio","unlocks_per_hr","z_screen_time_hrs","z_social_media_min","z_gaming_min","z_productive_min","z_app_switches","z_night_usage_min","z_phone_unlocks","z_distraction_ratio","z_productive_ratio","deviation_score"],"classes":["Normal","Increased Distraction","Unusually Distracted"],"window":14,"min_days":7};
+const D = {"dataset":{"raw_rows":4885,"raw_cols":14,"clean_rows":4800,"users":40,"days":120,"model_rows":4520,"train_rows":3360,"test_rows":1160,"n_features":23},"issues":[["Missing values","user_type",51],["Missing values","social_media_min",123],["Missing values","gaming_min",96],["Missing values","night_usage_min",145],["Missing values","phone_unlocks",97],["Missing values","notifications",197],["Exact duplicate records","all columns",85],["Inconsistent label spellings","label",290],["Inconsistent user_type spellings","user_type",190],["Non-ISO date format (dd/mm/yyyy)","date",242],["Negative duration","gaming_min",13],["Screen time > 24 h","screen_time_hrs",8],["Night usage > 6 h window (360 min)","night_usage_min",10],["Sensor glitch value 9999","app_switches",14],["Total \u2260 sum of activity minutes (>0.1 h)","screen_time_hrs",21]],"cleaning":[["Standardised label / user_type spellings",290],["Unified dd/mm/yyyy dates to ISO",242],["Removed duplicate user-day records",85],["Invalid gaming_min set to missing",12],["Invalid app_switches set to missing",14],["Invalid night_usage_min set to missing",10],["Imputed numeric gaps with the user's own median",682],["Recomputed screen_time_hrs from activity minutes",153]],"class_counts":[2854,1379,567],"weekly_pct":{"Normal":[57.4,65.0,61.9,62.6,66.0,55.9,47.5],"Increased Distraction":[28.6,24.9,29.0,27.5,25.3,30.1,35.7],"Unusually Distracted":[14.0,10.1,9.1,9.9,8.7,14.0,16.8]},"box_raw":{"app_switches":{"Normal":[40.0,47.0,57.0,70.0,84.0],"Increased Distraction":[49.0,60.0,73.0,89.0,111.0],"Unusually Distracted":[76.0,89.0,108.0,135.0,163.0]},"productive_min":{"Normal":[36.5,58.85,88.4,125.6,169.22],"Increased Distraction":[24.49,44.35,70.2,100.35,137.31],"Unusually Distracted":[17.0,29.6,46.4,63.7,87.8]},"social_media_min":{"Normal":[22.3,33.1,57.0,92.55,142.8],"Increased Distraction":[32.4,47.9,81.8,142.07,219.03],"Unusually Distracted":[50.7,77.1,135.1,232.0,348.2]},"night_usage_min":{"Normal":[7.1,14.4,20.7,28.5,37.12],"Increased Distraction":[10.69,20.1,31.5,42.62,55.91],"Unusually Distracted":[13.0,33.8,50.1,70.0,91.0]}},"box_z":{"z_app_switches":{"Normal":[-1.26,-0.92,-0.51,-0.07,0.5],"Increased Distraction":[-0.82,-0.39,0.1,0.86,1.71],"Unusually Distracted":[0.28,0.92,1.57,2.75,4.41]},"z_productive_min":{"Normal":[-0.94,-0.32,0.3,1.01,1.7],"Increased Distraction":[-1.39,-0.89,-0.28,0.38,0.99],"Unusually Distracted":[-2.14,-1.68,-1.22,-0.84,-0.44]},"z_social_media_min":{"Normal":[-1.17,-0.87,-0.57,-0.21,0.22],"Increased Distraction":[-0.73,-0.31,0.22,0.96,1.9],"Unusually Distracted":[0.19,0.87,1.87,3.1,4.45]},"z_night_usage_min":{"Normal":[-1.19,-0.9,-0.56,-0.17,0.37],"Increased Distraction":[-0.72,-0.32,0.15,0.86,1.7],"Unusually Distracted":[0.33,0.87,1.87,3.04,4.74]}},"baselines":{"U029":2.51,"U022":2.55,"U026":2.81,"U025":3.22,"U008":3.44,"U036":3.58,"U037":3.62,"U004":3.8,"U039":3.87,"U028":4.13,"U018":4.16,"U040":4.31,"U032":4.38,"U005":4.51,"U031":4.55,"U024":4.64,"U007":4.66,"U014":4.71,"U034":4.89,"U035":4.96,"U013":4.96,"U030":5.06,"U012":5.06,"U038":5.29,"U017":5.36,"U001":5.4,"U002":5.43,"U021":5.49,"U033":5.53,"U009":5.56,"U019":5.62,"U003":5.63,"U015":5.72,"U006":5.84,"U027":5.94,"U010":6.02,"U023":6.07,"U016":6.12,"U020":6.44,"U011":7.3},"mutual_info":{"deviation_score":0.346,"z_social_media_min":0.256,"z_distraction_ratio":0.256,"z_night_usage_min":0.238,"z_productive_ratio":0.232,"z_gaming_min":0.232,"z_app_switches":0.197,"app_switches":0.183,"night_usage_min":0.176,"z_productive_min":0.16,"z_phone_unlocks":0.145,"phone_unlocks":0.114,"productive_ratio":0.113,"z_screen_time_hrs":0.098,"screen_time_hrs":0.095,"social_media_min":0.093,"distraction_ratio":0.082,"night_usage_ratio":0.073,"gaming_min":0.072,"productive_min":0.058,"switch_rate_per_hr":0.046,"notifications":0.02,"unlocks_per_hr":0.017,"is_weekend":0.003,"other_min":0.002,"is_student":0.0},"comparison":{"Z-score baseline":{"Accuracy":0.716,"Precision (macro)":0.664,"Recall (macro)":0.522,"F1 (macro)":0.54,"F1 Unusual":0.554,"ROC-AUC (OvR)":0.853,"CV F1 (macro)":null},"Isolation Forest":{"Accuracy":0.588,"Precision (macro)":0.507,"Recall (macro)":0.536,"F1 (macro)":0.518,"F1 Unusual":0.51,"ROC-AUC (OvR)":0.705,"CV F1 (macro)":null},"K-Means":{"Accuracy":0.718,"Precision (macro)":0.681,"Recall (macro)":0.674,"F1 (macro)":0.674,"F1 Unusual":0.676,"ROC-AUC (OvR)":0.847,"CV F1 (macro)":null},"Logistic Regression":{"Accuracy":0.784,"Precision (macro)":0.726,"Recall (macro)":0.779,"F1 (macro)":0.749,"F1 Unusual":0.767,"ROC-AUC (OvR)":0.89,"CV F1 (macro)":0.74},"Decision Tree":{"Accuracy":0.704,"Precision (macro)":0.657,"Recall (macro)":0.669,"F1 (macro)":0.662,"F1 Unusual":0.692,"ROC-AUC (OvR)":0.746,"CV F1 (macro)":0.622},"Random Forest":{"Accuracy":0.794,"Precision (macro)":0.748,"Recall (macro)":0.76,"F1 (macro)":0.754,"F1 Unusual":0.78,"ROC-AUC (OvR)":0.895,"CV F1 (macro)":0.76},"Logistic Regression (tuned)":{"Accuracy":0.812,"Precision (macro)":0.778,"Recall (macro)":0.751,"F1 (macro)":0.763,"F1 Unusual":0.786,"ROC-AUC (OvR)":0.898,"CV F1 (macro)":0.752},"Decision Tree (tuned)":{"Accuracy":0.761,"Precision (macro)":0.702,"Recall (macro)":0.705,"F1 (macro)":0.703,"F1 Unusual":0.712,"ROC-AUC (OvR)":0.858,"CV F1 (macro)":0.708},"Random Forest (tuned)":{"Accuracy":0.793,"Precision (macro)":0.738,"Recall (macro)":0.765,"F1 (macro)":0.75,"F1 Unusual":0.762,"ROC-AUC (OvR)":0.893,"CV F1 (macro)":0.763},"Z-score baseline (tuned)":{"Accuracy":0.754,"Precision (macro)":0.689,"Recall (macro)":0.637,"F1 (macro)":0.65,"F1 Unusual":0.667,"ROC-AUC (OvR)":0.855,"CV F1 (macro)":null}},"confusion":{"Z-score baseline":[[738,5,0],[245,44,13],[21,45,49]],"Isolation Forest":[[512,191,40],[160,104,38],[9,40,66]],"K-Means":[[577,165,1],[91,182,29],[1,40,74]],"Logistic Regression":[[616,120,7],[70,195,37],[0,16,99]],"Decision Tree":[[577,161,5],[110,159,33],[5,29,81]],"Random Forest":[[644,97,2],[90,185,27],[0,23,92]],"Logistic Regression (tuned)":[[682,60,1],[110,172,20],[0,27,88]],"Decision Tree (tuned)":[[639,103,1],[107,161,34],[2,30,83]],"Random Forest (tuned)":[[637,104,2],[78,190,34],[0,22,93]],"Z-score baseline (tuned)":[[702,39,2],[173,100,29],[5,37,73]]},"tuning":[["Logistic Regression","{'clf__C': 0.03, 'clf__class_weight': None}",0.749,0.763],["Decision Tree","{'class_weight': None, 'criterion': 'gini', 'max_depth': 5, 'min_samples_leaf': 40}",0.662,0.703],["Random Forest","{'class_weight': 'balanced', 'max_depth': 10, 'max_features': 0.5, 'min_samples_leaf': 3, 'n_estimators': 300}",0.754,0.75],["Z-score baseline","{'t1': np.float64(0.4), 't2': np.float64(1.4)}",0.54,0.65]],"ablation":[["Raw usage only",11.0,0.694,0.742],["Raw + ratios",16.0,0.711,0.743],["Selected (raw + ratios + personal z)",23.0,0.763,0.75]],"clustering":{"Silhouette":0.283,"Davies-Bouldin":1.247,"Calinski-Harabasz":611.807},"k_selection":[[2.0,19439.365,0.466,0.992,2446.14],[3.0,15623.354,0.284,1.234,1931.328],[4.0,13784.046,0.206,1.397,1608.196],[5.0,12642.519,0.182,1.492,1390.396],[6.0,12008.261,0.145,1.67,1206.153],[7.0,11404.111,0.151,1.604,1087.669],[8.0,11011.021,0.154,1.685,982.371]],"importance":{"app_switches":0.0405,"phone_unlocks":0.029,"night_usage_min":0.0283,"notifications":0.0206,"z_productive_min":0.0157,"social_media_min":0.0155,"z_gaming_min":0.0138,"switch_rate_per_hr":0.0136,"screen_time_hrs":0.0128,"z_social_media_min":0.0118,"z_distraction_ratio":0.0079,"night_usage_ratio":0.0065,"z_night_usage_min":0.0049,"z_phone_unlocks":0.0041,"unlocks_per_hr":0.0033,"deviation_score":0.0027,"productive_min":0.0023,"z_screen_time_hrs":0.0016,"z_productive_ratio":0.0004,"distraction_ratio":-0.0003,"gaming_min":-0.0019,"productive_ratio":-0.0025,"z_app_switches":-0.0032},"final":"Logistic Regression (tuned)","runner_up":"Random Forest (tuned)","mcnemar_p":0.063,"f1_diff_ci":[-0.015,0.042],"cv_std":{"Logistic Regression (tuned)":0.014,"Decision Tree (tuned)":0.017,"Random Forest (tuned)":0.032},"user_cv":{"screen_time_hrs":0.192,"social_media_min":0.457,"gaming_min":0.423,"productive_min":0.348,"other_min":0.236,"app_switches":0.356,"night_usage_min":0.439,"phone_unlocks":0.296,"notifications":0.232,"distraction_ratio":0.253,"productive_ratio":0.362},"demo":{"U003":{"type":"Student","history":{"screen_time_hrs":[5.63,5.56,4.53,4.57,6.6,7.37,5.66,5.94,6.35,6.3,6.96,5.87,6.24,10.25],"social_media_min":[139.0,106.9,79.1,77.3,111.0,189.9,136.2,192.5,98.9,85.4,76.1,134.6,189.8,295.2],"gaming_min":[26.8,23.3,17.6,29.7,30.8,47.3,42.9,21.7,30.4,14.6,32.5,20.4,29.1,95.4],"productive_min":[74.6,73.2,87.0,67.6,80.0,29.0,33.7,56.0,41.6,83.0,64.4,63.3,26.6,29.2],"other_min":[97.2,130.4,87.9,99.4,174.2,176.0,126.8,86.2,210.1,194.8,244.7,133.9,129.2,195.2],"app_switches":[56,36,56,41,48,113,63,63,54,36,44,30,88,116],"night_usage_min":[15.3,26.1,15.6,24.5,16.4,32.1,45.5,21.9,16.6,18.4,13.0,15.6,33.5,59.7],"phone_unlocks":[104,109,77,130,69,100,168,159,98,76,114,118,205,153],"notifications":[109,110,152,166,81,163,169,93,110,149,162,148,153,159]},"next_days":[{"screen_time_hrs":5.38,"social_media_min":75.6,"gaming_min":24.4,"productive_min":65.8,"other_min":156.8,"app_switches":38,"night_usage_min":18.3,"phone_unlocks":78,"notifications":88,"is_weekend":0,"label":"Normal","date":"Mon 15 Apr"},{"screen_time_hrs":5.26,"social_media_min":71.7,"gaming_min":15.1,"productive_min":68.0,"other_min":160.5,"app_switches":50,"night_usage_min":19.6,"phone_unlocks":48,"notifications":94,"is_weekend":0,"label":"Normal","date":"Tue 16 Apr"},{"screen_time_hrs":4.99,"social_media_min":72.7,"gaming_min":28.8,"productive_min":54.2,"other_min":143.5,"app_switches":36,"night_usage_min":19.6,"phone_unlocks":85,"notifications":120,"is_weekend":0,"label":"Normal","date":"Wed 17 Apr"},{"screen_time_hrs":10.96,"social_media_min":261.1,"gaming_min":40.1,"productive_min":38.3,"other_min":317.8,"app_switches":125,"night_usage_min":49.0,"phone_unlocks":136,"notifications":100,"is_weekend":0,"label":"Unusually Distracted","date":"Thu 18 Apr"},{"screen_time_hrs":5.76,"social_media_min":138.0,"gaming_min":19.6,"productive_min":54.1,"other_min":134.1,"app_switches":32,"night_usage_min":12.0,"phone_unlocks":81,"notifications":106,"is_weekend":0,"label":"Increased Distraction","date":"Fri 19 Apr"}]},"U017":{"type":"Student","history":{"screen_time_hrs":[6.27,4.28,4.94,6.44,5.22,4.8,4.73,4.89,6.81,5.51,5.59,5.95,6.89,7.89],"social_media_min":[100.4,62.5,61.5,97.5,83.3,97.4,75.5,56.5,107.5,63.9,71.7,85.9,138.6,172.6],"gaming_min":[149.1,97.2,82.2,158.5,122.9,97.6,120.8,116.1,125.7,138.2,109.9,125.4,165.7,226.3],"productive_min":[75.5,52.1,93.2,92.7,71.7,67.2,51.7,79.3,118.3,75.9,113.3,97.9,46.2,28.6],"other_min":[51.3,44.9,59.6,37.9,35.1,26.0,36.0,41.3,56.9,52.6,40.6,47.5,63.1,46.0],"app_switches":[85,71,103,57,45,128,61,79,76,57,85,60,147,104],"night_usage_min":[18.3,21.1,19.8,20.0,15.7,21.4,26.7,19.0,15.0,22.3,16.2,20.3,34.7,38.8],"phone_unlocks":[61,78,37,49,52,31,77,46,50,65,38,61,74,66],"notifications":[36,36,38,49,45,30,33,36,39,46,26,31,28,36]},"next_days":[{"screen_time_hrs":5.82,"social_media_min":94.9,"gaming_min":129.1,"productive_min":62.9,"other_min":62.0,"app_switches":117,"night_usage_min":20.1,"phone_unlocks":74,"notifications":54,"is_weekend":0,"label":"Increased Distraction","date":"Mon 15 Apr"},{"screen_time_hrs":9.56,"social_media_min":180.4,"gaming_min":271.3,"productive_min":66.8,"other_min":55.2,"app_switches":96,"night_usage_min":25.3,"phone_unlocks":63,"notifications":38,"is_weekend":0,"label":"Increased Distraction","date":"Tue 16 Apr"},{"screen_time_hrs":8.0,"social_media_min":124.9,"gaming_min":261.2,"productive_min":61.6,"other_min":32.4,"app_switches":142,"night_usage_min":20.1,"phone_unlocks":64,"notifications":41,"is_weekend":0,"label":"Increased Distraction","date":"Wed 17 Apr"},{"screen_time_hrs":5.27,"social_media_min":81.4,"gaming_min":139.5,"productive_min":42.8,"other_min":52.6,"app_switches":127,"night_usage_min":20.1,"phone_unlocks":91,"notifications":47,"is_weekend":0,"label":"Increased Distraction","date":"Thu 18 Apr"},{"screen_time_hrs":5.05,"social_media_min":46.4,"gaming_min":129.1,"productive_min":65.6,"other_min":61.8,"app_switches":70,"night_usage_min":14.1,"phone_unlocks":60,"notifications":26,"is_weekend":0,"label":"Normal","date":"Fri 19 Apr"}]},"U029":{"type":"Professional","history":{"screen_time_hrs":[3.21,2.52,2.78,3.22,2.9,2.66,1.63,3.4,2.29,2.65,2.32,2.05,2.13,3.44],"social_media_min":[69.8,31.5,25.2,22.2,39.9,69.5,35.0,43.5,30.0,37.4,31.1,37.4,38.9,86.1],"gaming_min":[32.4,12.8,13.5,10.6,20.6,18.8,11.0,15.7,12.9,18.6,9.9,16.8,24.5,40.4],"productive_min":[36.4,67.6,83.8,103.9,83.5,32.1,25.4,106.6,60.5,74.1,67.7,37.2,41.3,35.0],"other_min":[53.9,39.5,44.3,56.7,30.1,39.1,26.5,37.9,34.1,28.7,30.2,31.8,23.4,44.7],"app_switches":[157,37,36,87,50,41,80,54,52,86,41,63,119,233],"night_usage_min":[25.6,18.6,16.0,15.0,10.6,14.1,18.5,16.2,10.2,15.9,14.8,23.8,20.8,56.9],"phone_unlocks":[127,88,56,88,67,75,87,56,125,51,64,73,57,127],"notifications":[142,174,115,133,222,126,139,140,163,147,128,182,159,189]},"next_days":[{"screen_time_hrs":2.5,"social_media_min":51.8,"gaming_min":23.8,"productive_min":47.5,"other_min":27.1,"app_switches":89,"night_usage_min":26.2,"phone_unlocks":61,"notifications":160,"is_weekend":0,"label":"Unusually Distracted","date":"Mon 15 Apr"},{"screen_time_hrs":2.98,"social_media_min":40.5,"gaming_min":11.4,"productive_min":88.3,"other_min":38.5,"app_switches":50,"night_usage_min":10.1,"phone_unlocks":22,"notifications":111,"is_weekend":0,"label":"Normal","date":"Tue 16 Apr"},{"screen_time_hrs":2.88,"social_media_min":29.3,"gaming_min":16.8,"productive_min":91.5,"other_min":34.9,"app_switches":40,"night_usage_min":7.1,"phone_unlocks":47,"notifications":94,"is_weekend":0,"label":"Normal","date":"Wed 17 Apr"},{"screen_time_hrs":2.11,"social_media_min":28.4,"gaming_min":12.0,"productive_min":55.3,"other_min":30.7,"app_switches":59,"night_usage_min":13.6,"phone_unlocks":98,"notifications":74,"is_weekend":0,"label":"Normal","date":"Thu 18 Apr"},{"screen_time_hrs":2.88,"social_media_min":27.1,"gaming_min":12.9,"productive_min":98.2,"other_min":34.3,"app_switches":52,"night_usage_min":9.9,"phone_unlocks":74,"notifications":88,"is_weekend":0,"label":"Normal","date":"Fri 19 Apr"}]}}};
+const CLS = ["Normal", "Increased Distraction", "Unusually Distracted"];
+const SHORT = ["Normal", "Increased", "Unusual"];
+const CV = D.user_cv;
+const $ = s => document.querySelector(s);
+const fmt = (x, d = 3) => x == null ? "–" : (+x).toFixed(d);
+const cvar = i => `var(--c${i})`;
+
+/* ---------- tabs ---------- */
+const tabs = [...document.querySelectorAll("nav.tabs button")];
+function showTab(id) {
+  tabs.forEach(b => b.setAttribute("aria-selected", b.dataset.tab === id));
+  document.querySelectorAll("section.panel").forEach(s => s.hidden = s.id !== "tab-" + id);
+  try { localStorage.setItem("tab", id); } catch (e) {}
+}
+tabs.forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+const hashTab = location.hash.slice(1);
+if (tabs.some(b => b.dataset.tab === hashTab)) showTab(hashTab);
+
+/* ---------- feature engineering, mirrors notebook section 2.3 ---------- */
+const BASE = ["screen_time_hrs", "social_media_min", "gaming_min", "productive_min", "app_switches",
+              "night_usage_min", "phone_unlocks", "distraction_ratio", "productive_ratio"];
+function enrich(d) {
+  const o = { ...d };
+  o.screen_time_hrs = +(((+d.social_media_min) + (+d.gaming_min) + (+d.productive_min) + (+d.other_min)) / 60).toFixed(2);
+  const tot = o.screen_time_hrs * 60;
+  o.distraction_ratio = (+d.social_media_min + +d.gaming_min) / tot;
+  o.productive_ratio = +d.productive_min / tot;
+  o.switch_rate_per_hr = +d.app_switches / o.screen_time_hrs;
+  o.night_usage_ratio = +d.night_usage_min / tot;
+  o.unlocks_per_hr = +d.phone_unlocks / o.screen_time_hrs;
+  return o;
+}
+const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+const sd = a => { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+// baseline = {col: [mu, sd]}; today = enriched day
+function features(today, baseline) {
+  const f = { ...today };
+  for (const c of BASE) {
+    const [mu, s] = baseline[c];
+    const s2 = Math.max(s, 0.10 * Math.abs(mu) + 1e-6);
+    f["z_" + c] = (today[c] - mu) / s2;
+  }
+  f.deviation_score = (f.z_social_media_min + f.z_gaming_min + f.z_app_switches + f.z_night_usage_min - f.z_productive_min) / 5;
+  return f;
+}
+function baselineFromHistory(days) {
+  const e = days.map(enrich), b = {};
+  for (const c of BASE) { const v = e.map(d => d[c]); b[c] = [mean(v), sd(v)]; }
+  return b;
+}
+function baselineFromTypical(typ) {
+  const e = enrich(typ), b = {};
+  for (const c of BASE) b[c] = [e[c], e[c] * (CV[c] ?? 0.3)];
+  return b;
+}
+function predict(f) {
+  const x = MODEL.features.map(n => f[n]);
+  if (MODEL.type === "logreg") {
+    const xs = x.map((v, i) => (v - MODEL.mean[i]) / MODEL.scale[i]);
+    const lg = MODEL.coef.map((w, k) => w.reduce((s, wi, i) => s + wi * xs[i], MODEL.intercept[k]));
+    const m = Math.max(...lg), e = lg.map(v => Math.exp(v - m)), t = e.reduce((a, b) => a + b, 0);
+    return e.map(v => v / t);
+  }
+  const p = [0, 0, 0];
+  for (const t of MODEL.trees) { let n = 0; while (t.l[n] !== -1) n = x[t.f[n]] <= t.t[n] ? t.l[n] : t.r[n]; t.v[n].forEach((v, k) => p[k] += v / MODEL.trees.length); }
+  return p;
+}
+
+/* ---------- predictor UI ---------- */
+const INPUTS = [
+  ["social_media_min", "Social media (min)"], ["gaming_min", "Gaming (min)"], ["productive_min", "Productive work (min)"],
+  ["other_min", "Other apps (min)"], ["app_switches", "App switches"], ["night_usage_min", "Night use 23:00–05:00 (min)"],
+  ["phone_unlocks", "Phone unlocks"], ["notifications", "Notifications"]];
+const STRIPS = [["z_social_media_min", "Social media"], ["z_gaming_min", "Gaming"], ["z_productive_min", "Productive time"],
+  ["z_app_switches", "App switching"], ["z_night_usage_min", "Night use"], ["z_screen_time_hrs", "Total screen time"]];
+
+let mode = "demo", person = Object.keys(D.demo)[0], dayIdx = 0;
+const demoVals = {};
+const OWN_TYP = { social_media_min: 60, gaming_min: 30, productive_min: 140, other_min: 70, app_switches: 55, night_usage_min: 20, phone_unlocks: 65, notifications: 100 };
+const OWN_TODAY = { social_media_min: 150, gaming_min: 80, productive_min: 70, other_min: 80, app_switches: 115, night_usage_min: 55, phone_unlocks: 95, notifications: 120 };
+
+function render(proba, f, recordedLabel) {
+  const k = proba.indexOf(Math.max(...proba));
+  $("#verdict").className = "verdict v" + k;
+  $("#v-state").className = "state s" + k;
+  $("#v-state").textContent = CLS[k];
+  $("#v-sub").textContent = `${(proba[k] * 100).toFixed(0)}% probability · deviation score ${f.deviation_score >= 0 ? "+" : ""}${f.deviation_score.toFixed(2)}σ`;
+  $("#probs").innerHTML = proba.map((p, i) => `<div class="prow"><span>${CLS[i]}</span><div class="track"><div class="fill" style="width:${(p * 100).toFixed(1)}%;background:${cvar(i)}"></div></div><span class="z">${(p * 100).toFixed(1)}%</span></div>`).join("");
+  $("#recorded").innerHTML = recordedLabel ? `Recorded label for this day: <span class="pill ${"v" + CLS.indexOf(recordedLabel)} ${"s" + CLS.indexOf(recordedLabel)}">${recordedLabel}</span> ${recordedLabel === CLS[k] ? "· model agrees" : "· model disagrees"}` : "";
+  $("#strips").innerHTML = STRIPS.map(([key, name]) => {
+    const z = f[key], cl = Math.max(-3, Math.min(3, z)), pos = (cl + 3) / 6 * 100;
+    const bad = key === "z_productive_min" ? -z : z;
+    const col = bad > 2 ? "var(--c2)" : bad > 1 ? "var(--c1)" : "var(--c0)";
+    return `<div class="strip"><span>${name}</span><div class="scale"><div class="axis"></div><div class="band"></div><div class="mid"></div><div class="dot" style="left:${pos}%;background:${col}"></div></div><span class="z">${z >= 0 ? "+" : ""}${z.toFixed(1)}σ</span></div>`;
+  }).join("");
+}
+
+function fieldRow(id, label, val) {
+  return `<label class="f" for="${id}"><span>${label}</span><input type="number" min="0" step="1" id="${id}" value="${val}"></label>`;
+}
+function buildDemo() {
+  $("#people").innerHTML = Object.entries(D.demo).map(([u, v]) => `<button class="chip" aria-pressed="${u === person}" data-u="${u}">${u} · ${v.type}</button>`).join("");
+  document.querySelectorAll("#people .chip").forEach(b => b.onclick = () => { person = b.dataset.u; dayIdx = 0; buildDemo(); });
+  const nd = D.demo[person].next_days;
+  $("#days").innerHTML = nd.map((d, i) => `<button class="chip" aria-pressed="${i === dayIdx}" data-i="${i}">${d.date}</button>`).join("");
+  document.querySelectorAll("#days .chip").forEach(b => b.onclick = () => { dayIdx = +b.dataset.i; buildDemo(); });
+  const day = nd[dayIdx];
+  $("#demo-fields").innerHTML = INPUTS.map(([k, l]) => fieldRow("d_" + k, l, day[k])).join("");
+  INPUTS.forEach(([k]) => $("#d_" + k).addEventListener("input", runDemo));
+  $("#demo-note").textContent = `Baseline built from ${person}'s previous 14 recorded days. Edit any value to see how the prediction moves.`;
+  runDemo();
+}
+function demoWindow() {
+  const h = D.demo[person].history, nd = D.demo[person].next_days;
+  const n = h.screen_time_hrs.length;
+  const hist = [...Array(n).keys()].map(i => Object.fromEntries(Object.keys(h).map(k => [k, h[k][i]])));
+  return hist.concat(nd.slice(0, dayIdx)).slice(-MODEL.window);
+}
+function readFields(prefix) {
+  return Object.fromEntries(INPUTS.map(([k]) => [k, Math.max(0, +($(prefix + k).value) || 0)]));
+}
+function runDemo() {
+  const today = enrich(readFields("#d_"));
+  $("#demo-total").textContent = today.screen_time_hrs.toFixed(2) + " h";
+  const f = features(today, baselineFromHistory(demoWindow()));
+  const day = D.demo[person].next_days[dayIdx];
+  const edited = INPUTS.some(([k]) => +$("#d_" + k).value !== +day[k]);
+  render(predict(f), f, edited ? null : day.label);
+}
+function buildOwn() {
+  $("#own-fields").innerHTML = INPUTS.map(([k, l]) => `<div class="f2"><label for="t_${k}">${l}</label><input type="number" min="0" id="t_${k}" value="${OWN_TYP[k]}" aria-label="${l} typical"><input type="number" min="0" id="o_${k}" value="${OWN_TODAY[k]}" aria-label="${l} today"></div>`).join("");
+  INPUTS.forEach(([k]) => { $("#t_" + k).addEventListener("input", runOwn); $("#o_" + k).addEventListener("input", runOwn); });
+}
+function runOwn() {
+  const typ = readFields("#t_"), today = enrich(readFields("#o_"));
+  $("#own-total").textContent = `${enrich(typ).screen_time_hrs.toFixed(1)} h / ${today.screen_time_hrs.toFixed(1)} h`;
+  const f = features(today, baselineFromTypical(typ));
+  render(predict(f), f, null);
+}
+function setMode(m) {
+  mode = m;
+  $("#m-demo").setAttribute("aria-pressed", m === "demo"); $("#m-own").setAttribute("aria-pressed", m === "own");
+  $("#demo-ui").hidden = m !== "demo"; $("#own-ui").hidden = m !== "own";
+  m === "demo" ? runDemo() : runOwn();
+}
+$("#m-demo").onclick = () => setMode("demo");
+$("#m-own").onclick = () => setMode("own");
+
+/* ---------- static sections ---------- */
+const ds = D.dataset;
+$("#facts").innerHTML = [["People", ds.users], ["Days each", ds.days], ["Modelled user-days", ds.model_rows.toLocaleString()], ["Features", ds.n_features], ["Final model", D.final.replace(" (tuned)", "")]]
+  .map(([a, b]) => `<div><span class="muted">${a}</span><b>${b}</b></div>`).join("");
+
+$("#data-kpis").innerHTML = [["Raw rows", ds.raw_rows.toLocaleString()], ["Clean rows", ds.clean_rows.toLocaleString()], ["Train / test", `${ds.train_rows.toLocaleString()} / ${ds.test_rows.toLocaleString()}`], ["Raw columns", ds.raw_cols]]
+  .map(([a, b]) => `<div class="kpi"><span class="eyebrow">${a}</span><b>${b}</b></div>`).join("");
+$("#issues").innerHTML = `<tr><th>Issue</th><th>Column</th><th class="n">Rows</th></tr>` + D.issues.map(r => `<tr><td>${r[0]}</td><td class="mono">${r[1]}</td><td class="n">${r[2]}</td></tr>`).join("");
+$("#cleaning").innerHTML = `<tr><th>Step</th><th class="n">Rows</th></tr>` + D.cleaning.map(r => `<tr><td>${r[0]}</td><td class="n">${r[1]}</td></tr>`).join("");
+
+function bars(el, items, max, colorFn, dec = 3) {
+  $(el).innerHTML = items.map(([lab, v], i) => `<div class="bar"><span class="lab">${lab}</span><div class="track"><div class="fill" style="width:${Math.max(0, v) / max * 100}%;background:${colorFn(lab, i)}"></div></div><span class="v">${typeof v === "number" ? v.toFixed(dec) : v}</span></div>`).join("");
+}
+const tot = D.class_counts.reduce((a, b) => a + b, 0);
+bars("#classbal", D.class_counts.map((c, i) => [CLS[i], c]), Math.max(...D.class_counts), (l, i) => cvar(i), 0);
+$("#classbal").querySelectorAll(".v").forEach((e, i) => e.textContent = (D.class_counts[i] / tot * 100).toFixed(0) + "%");
+
+const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+$("#weekly").innerHTML = DOW.map((d, j) => `<div class="srow"><span>${d}</span><div class="sbar">${CLS.map((c, i) => `<div title="${c}: ${D.weekly_pct[c][j]}%" style="width:${D.weekly_pct[c][j]}%;background:${cvar(i)}"></div>`).join("")}</div></div>`).join("");
+$("#leg1").innerHTML = CLS.map((c, i) => `<span><i style="background:${cvar(i)}"></i>${c}</span>`).join("");
+
+const bl = Object.values(D.baselines), blMax = Math.ceil(Math.max(...bl));
+$("#bl-min").textContent = Math.min(...bl).toFixed(1); $("#bl-max").textContent = Math.max(...bl).toFixed(1);
+$("#baselines").innerHTML = bl.map((v, i) => `<span title="${Object.keys(D.baselines)[i]}: ${v} h" style="left:${(i + .5) / bl.length * 100}%;height:${v / blMax * 100}%"></span>`).join("");
+
+const QS = [["app_switches", "z_app_switches", "App switches"], ["productive_min", "z_productive_min", "Productive min"],
+            ["social_media_min", "z_social_media_min", "Social min"], ["night_usage_min", "z_night_usage_min", "Night min"]];
+let qi = 0;
+function qplot(el, data, unit) {
+  const all = Object.values(data).flat(), lo = Math.min(...all), hi = Math.max(...all), sc = v => (v - lo) / (hi - lo) * 100;
+  $(el).innerHTML = CLS.map((c, i) => { const q = data[c]; return `<div class="qrow"><span>${SHORT[i]}</span><div class="qtrack">
+    <div class="qwhisk" style="left:${sc(q[0])}%;width:${sc(q[4]) - sc(q[0])}%;background:${cvar(i)}"></div>
+    <div class="qbox" style="left:${sc(q[1])}%;width:${sc(q[3]) - sc(q[1])}%;background:${cvar(i)}"></div>
+    <div class="qmed" style="left:${sc(q[2])}%"></div></div></div>`; }).join("") +
+    `<div class="qaxis"><span>${lo.toFixed(1)}${unit}</span><span>${((lo + hi) / 2).toFixed(1)}${unit}</span><span>${hi.toFixed(1)}${unit}</span></div>`;
+}
+function buildQ() {
+  $("#qsel").innerHTML = QS.map((q, i) => `<button aria-pressed="${i === qi}" data-i="${i}">${q[2]}</button>`).join("");
+  $("#qsel").querySelectorAll("button").forEach(b => b.onclick = () => { qi = +b.dataset.i; buildQ(); });
+  const [r, z, n] = QS[qi];
+  $("#q-raw-t").textContent = `Raw ${n}`; $("#q-z-t").textContent = `Deviation from own baseline (σ)`;
+  qplot("#q-raw", D.box_raw[r], ""); qplot("#q-z", D.box_z[z], "σ");
+}
+buildQ();
+
+const miE = Object.entries(D.mutual_info);
+bars("#mi", miE, Math.max(...miE.map(e => e[1])), l => l.startsWith("z_") || l === "deviation_score" ? "var(--c2)" : "var(--accent)");
+
+/* models */
+const M = D.comparison, names = Object.keys(M);
+const cols = ["Accuracy", "Precision (macro)", "Recall (macro)", "F1 (macro)", "F1 Unusual", "ROC-AUC (OvR)", "CV F1 (macro)"];
+const order = names.slice().sort((a, b) => M[b]["F1 (macro)"] - M[a]["F1 (macro)"]);
+const colMax = Object.fromEntries(cols.map(c => [c, Math.max(...names.map(n => M[n][c] ?? -1))]));
+$("#cmp").innerHTML = `<tr><th>Model</th>${cols.map(c => `<th class="n">${c.replace(" (macro)", "").replace(" (OvR)", "")}</th>`).join("")}</tr>` +
+  order.map(n => `<tr class="${n === D.final ? "best" : ""}"><td>${n}</td>${cols.map(c => `<td class="n" style="${M[n][c] === colMax[c] ? "font-weight:600" : ""}">${fmt(M[n][c])}</td>`).join("")}</tr>`).join("");
+bars("#f1bars", order.map(n => [n, M[n]["F1 (macro)"]]), 1, l => l === D.final ? "var(--c0)" : "var(--accent)");
+$("#tuning").innerHTML = `<tr><th>Model</th><th>Best setting</th><th class="n">Before</th><th class="n">After</th></tr>` +
+  D.tuning.map(r => `<tr><td>${r[0]}</td><td class="mono" style="font-size:.75rem">${r[1].replace(/[{}']/g, "").replace(/clf__/g, "")}</td><td class="n">${fmt(r[2])}</td><td class="n">${fmt(r[3])}</td></tr>`).join("");
+$("#cms").innerHTML = order.map(n => {
+  const m = D.confusion[n], rows = m.map(r => { const s = r.reduce((a, b) => a + b, 0); return r.map(v => v / s); });
+  return `<div class="cmcard"><span style="font-size:.85rem">${n}</span><div class="cm">${rows.flat().map((v, i) =>
+    `<div title="actual ${SHORT[Math.floor(i / 3)]}, predicted ${SHORT[i % 3]}" style="background:color-mix(in srgb, var(--accent) ${Math.round(v * 85)}%, var(--sunk));color:${v > .55 ? "#fff" : "var(--ink)"}">${v.toFixed(2)}</div>`).join("")}</div></div>`;
+}).join("");
+$("#clus").innerHTML = `<tr><th>Metric</th><th class="n">Value</th></tr>` + Object.entries(D.clustering).map(([k, v]) => `<tr><td>${k}</td><td class="n">${fmt(v)}</td></tr>`).join("") +
+  `<tr><td>Best k by silhouette</td><td class="n">${D.k_selection.reduce((a, b) => b[2] > a[2] ? b : a)[0]}</td></tr>`;
+$("#abl").innerHTML = `<tr><th>Features</th><th class="n">LR F1</th><th class="n">RF F1</th></tr>` + D.ablation.map(r => `<tr><td>${r[0]}</td><td class="n">${fmt(r[2])}</td><td class="n">${fmt(r[3])}</td></tr>`).join("");
+const impE = Object.entries(D.importance).slice(0, 8);
+bars("#imp", impE.map(([k, v]) => [k, v]), Math.max(...impE.map(e => e[1])), l => l.startsWith("z_") || l === "deviation_score" ? "var(--c2)" : "var(--accent)");
+
+/* verdict */
+const F = M[D.final], R = M[D.runner_up];
+$("#fin-name").textContent = `Tuned ${D.final.replace(" (tuned)", "")}`;
+$("#fin-kpis").innerHTML = [["Test accuracy", F.Accuracy], ["Macro-F1", F["F1 (macro)"]], ["F1, Unusual days", F["F1 Unusual"]], ["ROC-AUC", F["ROC-AUC (OvR)"]], ["CV macro-F1", F["CV F1 (macro)"]]]
+  .map(([a, b]) => `<div class="kpi"><span class="eyebrow">${a}</span><b>${fmt(b)}</b></div>`).join("");
+const zb = M["Z-score baseline"]["F1 (macro)"], abl = D.ablation;
+$("#reasons").innerHTML = [
+  `Highest test macro-F1 (${fmt(F["F1 (macro)"])}), accuracy, F1 on Unusual days and ROC-AUC of all ten model variants.`,
+  `Statistically tied with the runner-up ${D.runner_up}: the test F1 gap is ${fmt(F["F1 (macro)"] - R["F1 (macro)"])} (95% bootstrap CI ${fmt(D.f1_diff_ci[0])} to ${fmt(D.f1_diff_ci[1])}, McNemar p = ${fmt(D.mcnemar_p)}), and the forest's slightly higher CV score (${fmt(R["CV F1 (macro)"])} vs ${fmt(F["CV F1 (macro)"])}) is within its fold-to-fold spread of ±${fmt(D.cv_std[D.runner_up])}. With equal accuracy the simpler model is preferred: more stable across unseen people (±${fmt(D.cv_std[D.final])}), calibrated probabilities, readable coefficients and a ${(JSON.stringify(MODEL).length / 1024).toFixed(1)} kB file that runs in this page.`,
+  `Learns how much each deviation matters, where the Z-score rule weighs every signal equally: +${fmt(F["F1 (macro)"] - zb)} macro-F1 over the 1σ/2σ rule.`,
+  `Knows the direction of a change. Isolation Forest and K-Means flag unusual days, but an unusually productive day looks as anomalous to them as a distracted one.`,
+  `Expressing each day as a deviation from the person's own 14-day baseline makes the boundary close to linear: the linear model gains ${fmt(abl[2][2] - abl[0][2])} F1 from the ratio and baseline features, the forest only ${fmt(abl[2][3] - abl[0][3])}.`
+].map(t => `<li>${t}</li>`).join("");
+
+buildDemo(); buildOwn();
+try { const t = localStorage.getItem("tab"); if (!hashTab && t && tabs.some(b => b.dataset.tab === t)) showTab(t); } catch (e) {}
+</script>
+</body></html>
